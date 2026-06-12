@@ -1,0 +1,123 @@
+// Prisma Schema — 한민족 한글학교 도서관
+// Database: PostgreSQL (Supabase)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── 선생님 / 관리자 ─────────────────────────────────────────
+model Teacher {
+  id            String    @id @default(cuid())
+  githubId      String    @unique
+  name          String
+  email         String    @unique
+  image         String?
+  role          Role      @default(TEACHER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  loans         Loan[]    // 이 선생님이 처리한 대출
+  students      Student[] // 담당 학생
+
+  @@map("teachers")
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+}
+
+// ─── 학생 ──────────────────────────────────────────────────
+model Student {
+  id          String    @id @default(cuid())
+  studentCode String    @unique  // 학생 고유번호 (QR용)
+  name        String
+  className   String              // 반 (예: "초급 A")
+  gradeLevel  String?             // 학년
+  qrCode      String?             // QR 이미지 URL
+  teacherId   String?
+  teacher     Teacher?  @relation(fields: [teacherId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  loans       Loan[]
+
+  @@map("students")
+}
+
+// ─── 도서 ──────────────────────────────────────────────────
+model Book {
+  id              String    @id @default(cuid())
+  isbn            String?   @unique
+  title           String
+  author          String?
+  publisher       String?
+  publishYear     Int?
+  language        Language  @default(KOREAN)
+  category        String?   // 동화, 소설, 교육, 만화 등
+  description     String?
+  coverImageUrl   String?   // Cloudinary URL
+  qrCode          String?   // QR 이미지 URL (책 고유 QR)
+  bookCode        String    @unique  // 도서관 내부 코드
+  totalQuantity   Int       @default(1)
+  availableQty    Int       @default(1)
+  location        String?   // 서가 위치 (예: "A-3")
+  setId           String?
+  set             BookSet?  @relation(fields: [setId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  loans           Loan[]
+
+  @@map("books")
+}
+
+enum Language {
+  KOREAN
+  ENGLISH
+  OTHER
+}
+
+// ─── 도서 세트 (시리즈/묶음) ──────────────────────────────
+model BookSet {
+  id          String    @id @default(cuid())
+  name        String              // 예: "마법천자문 1-20권"
+  description String?
+  imageUrl    String?             // 세트 사진 (Cloudinary)
+  createdAt   DateTime  @default(now())
+
+  books       Book[]
+
+  @@map("book_sets")
+}
+
+// ─── 대출 기록 ─────────────────────────────────────────────
+model Loan {
+  id           String      @id @default(cuid())
+  bookId       String
+  book         Book        @relation(fields: [bookId], references: [id])
+  studentId    String
+  student      Student     @relation(fields: [studentId], references: [id])
+  teacherId    String
+  teacher      Teacher     @relation(fields: [teacherId], references: [id])
+  checkoutDate DateTime    @default(now())
+  dueDate      DateTime    // 기본 2주
+  returnDate   DateTime?
+  status       LoanStatus  @default(ACTIVE)
+  notes        String?
+
+  @@map("loans")
+}
+
+enum LoanStatus {
+  ACTIVE      // 대출중
+  RETURNED    // 반납완료
+  OVERDUE     // 연체
+  EXTENDED    // 연장
+}

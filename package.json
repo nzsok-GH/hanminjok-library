@@ -1,0 +1,45 @@
+{
+  "name": "hanminjok-library",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@auth/prisma-adapter": "^2.0.0",
+    "@prisma/client": "^5.0.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "cloudinary": "^2.0.0",
+    "html5-qrcode": "^2.3.8",
+    "next": "14.2.0",
+    "next-auth": "^5.0.0-beta.19",
+    "qrcode": "^1.5.3",
+    "react": "^18",
+    "react-dom": "^18",
+    "openai": "^4.0.0",
+    "sharp": "^0.33.0",
+    "axios": "^1.6.0",
+    "date-fns": "^3.0.0",
+    "react-hot-toast": "^2.4.1",
+    "lucide-react": "^0.363.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10.0.1",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.0",
+    "postcss": "^8",
+    "prisma": "^5.0.0",
+    "tailwindcss": "^3.3.0",
+    "typescript": "^5"
+  }
+}
