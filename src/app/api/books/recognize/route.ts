@@ -19,10 +19,13 @@ export async function POST(req: NextRequest) {
     const base64 = Buffer.from(buffer).toString('base64')
     const mimeType = file.type || 'image/jpeg'
 
-    const ai = new GoogleGenAI({ apiKey })
+    const ai = new GoogleGenAI({ 
+      apiKey,
+      httpOptions: { apiVersion: 'v1' }
+    })
 
     const response = await ai.models.generateContent({
-      model: 'gemini-1.5-flash-8b',
+      model: 'gemini-1.5-flash',
       contents: [
         {
           parts: [
