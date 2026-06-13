@@ -35,7 +35,12 @@ export default function StudentsPage() {
       const data: Student[] = await res.json()
       setStudents(data)
       if (!search && !className) {
-        const unique = [...new Set(data.map((s) => s.className))].sort()
+        const seen = new Set<string>()
+        const unique = data.map((s) => s.className).filter((c) => {
+          if (seen.has(c)) return false
+          seen.add(c)
+          return true
+        }).sort()
         setClasses(unique)
       }
     } catch {}
