@@ -1,61 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import Anthropic from '@anthropic-ai/sdk'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
-  if (!session) {
-    return NextResponse.json({ error: '인증이 필요합니다' }, { status: 401 })
-  }
+  if (!session) return NextResponse.json({ error: '인증 필요' }, { status: 401 })
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json({ error: 'ANTHROPIC_API_KEY가 설정되지 않았습니다' }, { status: 500 })
-  }
+  const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) return NextResponse.json({ error: 'GEMINI_API_KEY가 설정되지 않았습니다' }, { status: 500 })
 
-  const formData = await req.formData()
-  const imageFile = formData.get('image') as File | null
-  if (!imageFile) {
-    return NextResponse.json({ error: '이미지 파일이 필요합니다' }, { status: 400 })
-  }
+  try {
+    const formData = await req.formData()
+    const file = formData.get('file') as File
+    if (!file) return NextResponse.json({ error: '이미지 파일이 없습니다' }, { status: 400 })
 
-  const bytes = await imageFile.arrayBuffer()
-  const base64 = Buffer.from(bytes).toString('base64')
-  const mediaType = (imageFile.type || 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+    const buffer = await file.arrayBuffer()
+    const base64 = Buffer.from(buffer).toString('base64')
+    const mimeType = file.type as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/heic' | 'image/heif'
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
 
-  const response = await client.messages.create({
-    model: 'claude-opus-4-8',
-    max_tokens: 1024,
-    messages: [
+    const result = await model.generateContent([
       {
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: { type: 'base64', media_type: mediaType, data: base64 },
-          },
-          {
-            type: 'text',
-            text: 'This is an image of books. Extract all visible book titles and publishers. Return ONLY a JSON array: [{"title": "...", "publisher": "..."}]. If publisher is not visible, use empty string.',
-          },
-        ],
+        inlineData: {
+          data: base64,
+          mimeType,
+        },
       },
-    ],
-  })
+      'This is an image of books. Extract all visible book titles and publishers. Return ONLY a valid JSON array with no markdown, no code blocks, just raw JSON: [{"title": "...", "publisher": "..."}]. If publisher is not visible, use empty string. If no books found, return [].',
+    ])
 
-  const textBlock = response.content.find((b) => b.type === 'text')
-  if (!textBlock || textBlock.type !== 'text') {
-    return NextResponse.json({ error: '책 정보를 추출할 수 없습니다' }, { status: 500 })
+    const text = result.response.text().trim()
+    const clean = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
+    const books = JSON.parse(clean)
+    return NextResponse.json({ books })
+  } catch (error: any) {
+    console.error('Gemini recognize error:', error)
+    return NextResponse.json({ error: error.message || '인식 실패' }, { status: 500 })
   }
-
-  const raw = textBlock.text.trim()
-  const match = raw.match(/\[[\s\S]*\]/)
-  if (!match) {
-    return NextResponse.json({ error: '책 목록을 파싱할 수 없습니다', raw }, { status: 500 })
-  }
-
-  const books: { title: string; publisher: string }[] = JSON.parse(match[0])
-  return NextResponse.json({ books })
 }
