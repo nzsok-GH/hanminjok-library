@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { MobileNav, DesktopSidebar } from '@/components/ui/Navbar'
 
 type LoanStatus = 'ACTIVE' | 'RETURNED' | 'OVERDUE' | 'EXTENDED'
@@ -91,7 +92,15 @@ export default function LoansPage() {
         {/* Header */}
         <header className="sticky top-0 z-10 bg-white border-b border-gray-200">
           <div className="px-4 md:px-8 py-3 md:py-4">
-            <h1 className="text-lg md:text-xl font-bold text-gray-900 mb-3">📋 대출 내역</h1>
+            <div className="flex items-center justify-between mb-3">
+              <h1 className="text-lg md:text-xl font-bold text-gray-900">📋 대출 내역</h1>
+              <Link
+                href="/books"
+                className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors shrink-0"
+              >
+                📚 도서 관리
+              </Link>
+            </div>
             {/* Tabs */}
             <div className="flex gap-1">
               {TABS.map((t) => (
