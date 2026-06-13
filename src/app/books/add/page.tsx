@@ -223,7 +223,7 @@ export default function AddBookPage() {
     setBatchResult(null)
     try {
       const fd = new FormData()
-      fd.append('image', batchImage)
+      fd.append('file', batchImage)
       const res = await fetch('/api/books/recognize', { method: 'POST', body: fd })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || '인식 실패')
