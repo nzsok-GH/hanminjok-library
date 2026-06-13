@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
 
   // 선생님 ID 조회
   const teacher = await prisma.teacher.findUnique({
-    where: { githubId: session.user?.id || '' },
+    where: { email: session.user?.email || '' },
   })
 
   // 대출 생성 + 재고 감소 (트랜잭션)

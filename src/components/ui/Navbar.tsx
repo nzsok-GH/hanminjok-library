@@ -8,7 +8,8 @@ const navItems = [
   { href: '/qr-scan',   label: '대출/반납', icon: '📱' },
   { href: '/books',     label: '도서',      icon: '📚' },
   { href: '/students',  label: '학생',      icon: '👨‍👧‍👦' },
-  { href: '/dashboard', label: '현황',      icon: '📊' },
+  { href: '/loans',     label: '내역',      icon: '📋' },
+  { href: '/reports',   label: '통계',      icon: '📊' },
 ]
 
 // ─── Mobile Bottom Navigation ─────────────────────────────────────────────────
@@ -17,7 +18,7 @@ export function MobileNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 md:hidden">
-      <div className="grid grid-cols-4 h-16">
+      <div className="grid grid-cols-5 h-16">
         {navItems.map(({ href, label, icon }) => {
           const active = pathname === href || pathname.startsWith(href + '/')
           return (
