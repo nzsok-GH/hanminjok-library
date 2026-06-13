@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenAI } from '@google/genai'
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -17,22 +17,30 @@ export async function POST(req: NextRequest) {
 
     const buffer = await file.arrayBuffer()
     const base64 = Buffer.from(buffer).toString('base64')
-    const mimeType = file.type as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/heic' | 'image/heif'
+    const mimeType = file.type || 'image/jpeg'
 
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' })
+    const ai = new GoogleGenAI({ apiKey })
 
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          data: base64,
-          mimeType,
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: [
+        {
+          parts: [
+            {
+              inlineData: {
+                data: base64,
+                mimeType,
+              },
+            },
+            {
+              text: 'This is an image of books. Extract all visible book titles and publishers. Return ONLY a valid JSON array with no markdown, no code blocks, just raw JSON: [{"title": "...", "publisher": "..."}]. If publisher is not visible, use empty string. If no books found, return [].',
+            },
+          ],
         },
-      },
-      'This is an image of books. Extract all visible book titles and publishers. Return ONLY a valid JSON array with no markdown, no code blocks, just raw JSON: [{"title": "...", "publisher": "..."}]. If publisher is not visible, use empty string. If no books found, return [].',
-    ])
+      ],
+    })
 
-    const text = result.response.text().trim()
+    const text = response.text?.trim() ?? ''
     const clean = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
     const books = JSON.parse(clean)
     return NextResponse.json({ books })
