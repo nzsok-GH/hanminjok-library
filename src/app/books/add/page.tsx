@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import toast from 'react-hot-toast'
 
 interface BookForm {
   title: string
@@ -42,9 +43,21 @@ const CATEGORY_OPTIONS = [
   '종교', '철학', '언어', '백과사전', '만화', '기타',
 ]
 
+interface BatchRow {
+  id: number
+  title: string
+  publisher: string
+  quantity: number
+  checked: boolean
+}
+
+let nextBatchId = 1
+
 export default function AddBookPage() {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<'barcode' | 'manual'>('barcode')
+  const [activeTab, setActiveTab] = useState<'barcode' | 'manual' | 'batch'>('barcode')
+
+  // --- Single registration state ---
   const [form, setForm] = useState<BookForm>(EMPTY_FORM)
   const [scanStatus, setScanStatus] = useState<'idle' | 'scanning' | 'found' | 'error'>('idle')
   const [scanMessage, setScanMessage] = useState('')
@@ -54,6 +67,15 @@ export default function AddBookPage() {
   const scannerRef = useRef<any>(null)
   const scannerContainerId = 'isbn-scanner'
   const hasScanned = useRef(false)
+
+  // --- Batch registration state ---
+  const [batchImage, setBatchImage] = useState<File | null>(null)
+  const [batchPreview, setBatchPreview] = useState<string | null>(null)
+  const [isRecognizing, setIsRecognizing] = useState(false)
+  const [batchRows, setBatchRows] = useState<BatchRow[]>([])
+  const [isRegistering, setIsRegistering] = useState(false)
+  const [batchResult, setBatchResult] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const stopScanner = useCallback(async () => {
     if (scannerRef.current) {
@@ -185,6 +207,95 @@ export default function AddBookPage() {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
 
+  // --- Batch handlers ---
+  function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setBatchImage(file)
+    setBatchPreview(URL.createObjectURL(file))
+    setBatchRows([])
+    setBatchResult(null)
+  }
+
+  async function handleRecognize() {
+    if (!batchImage) return
+    setIsRecognizing(true)
+    setBatchResult(null)
+    try {
+      const fd = new FormData()
+      fd.append('image', batchImage)
+      const res = await fetch('/api/books/recognize', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || '인식 실패')
+      const rows: BatchRow[] = (data.books as { title: string; publisher: string }[]).map((b) => ({
+        id: nextBatchId++,
+        title: b.title,
+        publisher: b.publisher,
+        quantity: 1,
+        checked: true,
+      }))
+      setBatchRows(rows)
+    } catch (err: any) {
+      toast.error(err.message || '책 인식 중 오류가 발생했습니다.')
+    }
+    setIsRecognizing(false)
+  }
+
+  function updateBatchRow(id: number, field: keyof BatchRow, value: any) {
+    setBatchRows((prev) => prev.map((r) => r.id === id ? { ...r, [field]: value } : r))
+  }
+
+  function deleteBatchRow(id: number) {
+    setBatchRows((prev) => prev.filter((r) => r.id !== id))
+  }
+
+  function addBatchRow() {
+    setBatchRows((prev) => [...prev, { id: nextBatchId++, title: '', publisher: '', quantity: 1, checked: true }])
+  }
+
+  async function handleBatchRegister() {
+    const selected = batchRows.filter((r) => r.checked && r.title.trim())
+    if (selected.length === 0) {
+      toast.error('등록할 항목을 선택하세요.')
+      return
+    }
+    setIsRegistering(true)
+    setBatchResult(null)
+    let successCount = 0
+    const errors: string[] = []
+    for (const row of selected) {
+      try {
+        const res = await fetch('/api/books', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: row.title,
+            publisher: row.publisher || null,
+            language: 'KOREAN',
+            category: '',
+            quantity: row.quantity,
+          }),
+        })
+        if (res.ok) {
+          successCount++
+        } else {
+          const err = await res.json()
+          errors.push(`"${row.title}": ${err.error || '실패'}`)
+        }
+      } catch {
+        errors.push(`"${row.title}": 네트워크 오류`)
+      }
+    }
+    setIsRegistering(false)
+    if (errors.length === 0) {
+      setBatchResult(`✅ ${successCount}권 등록 완료!`)
+      toast.success(`${successCount}권이 등록되었습니다.`)
+      setBatchRows([])
+    } else {
+      setBatchResult(`✅ ${successCount}권 등록 완료, ❌ ${errors.length}권 실패:\n${errors.join('\n')}`)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       <div className="bg-white border-b sticky top-0 z-10">
@@ -209,11 +320,20 @@ export default function AddBookPage() {
           >
             ✏️ 직접 입력
           </button>
+          <button
+            className={`flex-1 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'batch' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50' : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setActiveTab('batch')}
+          >
+            🤖 일괄 등록
+          </button>
         </div>
       </div>
 
       <div className="max-w-lg mx-auto px-4 py-4">
 
+        {/* --- 바코드 스캔 탭 --- */}
         {activeTab === 'barcode' && (
           <div className="space-y-4">
             <div className="bg-white rounded-xl shadow-sm p-4">
@@ -241,6 +361,7 @@ export default function AddBookPage() {
           </div>
         )}
 
+        {/* --- 직접 입력 탭 --- */}
         {activeTab === 'manual' && (
           <form onSubmit={handleSubmit} className="space-y-4">
             {scanMessage && scanStatus === 'found' && (
@@ -352,6 +473,155 @@ export default function AddBookPage() {
               초기화
             </button>
           </form>
+        )}
+
+        {/* --- 일괄 등록 탭 --- */}
+        {activeTab === 'batch' && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+              <h2 className="font-semibold text-gray-700 text-sm">📸 책 사진 업로드</h2>
+              <p className="text-xs text-gray-500">책 표지나 책등(제목 부분)을 촬영하거나 이미지를 선택하세요.</p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleImageChange}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors"
+              >
+                {batchPreview ? '다른 사진 선택' : '📷 사진 촬영 / 파일 선택'}
+              </button>
+              {batchPreview && (
+                <div className="mt-2">
+                  <img src={batchPreview} alt="미리보기" className="w-full max-h-64 object-contain rounded-lg border border-gray-200" />
+                </div>
+              )}
+              <button
+                onClick={handleRecognize}
+                disabled={!batchImage || isRecognizing}
+                className="w-full py-3 bg-indigo-600 text-white rounded-lg font-medium text-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+              >
+                {isRecognizing ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    AI 인식 중…
+                  </>
+                ) : '🔍 책 목록 인식'}
+              </button>
+            </div>
+
+            {batchRows.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-semibold text-gray-700 text-sm">인식된 책 목록</h2>
+                  <span className="text-xs text-gray-400">{batchRows.filter((r) => r.checked).length}권 선택됨</span>
+                </div>
+                <div className="overflow-x-auto -mx-1">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-gray-500 border-b">
+                        <th className="py-2 px-1 text-center w-8">선택</th>
+                        <th className="py-2 px-1 text-left">제목</th>
+                        <th className="py-2 px-1 text-left w-24">출판사</th>
+                        <th className="py-2 px-1 text-center w-14">수량</th>
+                        <th className="py-2 px-1 text-center w-8"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {batchRows.map((row) => (
+                        <tr key={row.id} className="border-b last:border-0">
+                          <td className="py-2 px-1 text-center">
+                            <input
+                              type="checkbox"
+                              checked={row.checked}
+                              onChange={(e) => updateBatchRow(row.id, 'checked', e.target.checked)}
+                              className="rounded"
+                            />
+                          </td>
+                          <td className="py-2 px-1">
+                            <input
+                              type="text"
+                              value={row.title}
+                              onChange={(e) => updateBatchRow(row.id, 'title', e.target.value)}
+                              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              placeholder="제목"
+                            />
+                          </td>
+                          <td className="py-2 px-1">
+                            <input
+                              type="text"
+                              value={row.publisher}
+                              onChange={(e) => updateBatchRow(row.id, 'publisher', e.target.value)}
+                              className="w-full border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              placeholder="출판사"
+                            />
+                          </td>
+                          <td className="py-2 px-1">
+                            <input
+                              type="number"
+                              value={row.quantity}
+                              onChange={(e) => updateBatchRow(row.id, 'quantity', Math.max(1, parseInt(e.target.value) || 1))}
+                              min="1"
+                              max="999"
+                              className="w-full border border-gray-200 rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400"
+                            />
+                          </td>
+                          <td className="py-2 px-1 text-center">
+                            <button
+                              onClick={() => deleteBatchRow(row.id)}
+                              className="text-red-400 hover:text-red-600 text-base leading-none"
+                              title="행 삭제"
+                            >
+                              ×
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <button
+                  onClick={addBatchRow}
+                  className="w-full py-2 border border-dashed border-gray-300 rounded-lg text-xs text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
+                >
+                  + 행 추가
+                </button>
+              </div>
+            )}
+
+            {batchRows.length > 0 && (
+              <button
+                onClick={handleBatchRegister}
+                disabled={isRegistering || batchRows.filter((r) => r.checked && r.title.trim()).length === 0}
+                className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold text-base hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+              >
+                {isRegistering ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    등록 중…
+                  </>
+                ) : `📚 선택 항목 등록 (${batchRows.filter((r) => r.checked && r.title.trim()).length}권)`}
+              </button>
+            )}
+
+            {batchResult && (
+              <div className={`p-3 rounded-lg text-sm whitespace-pre-wrap ${
+                batchResult.startsWith('✅') ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+              }`}>
+                {batchResult}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
