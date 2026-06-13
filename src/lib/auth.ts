@@ -1,20 +1,20 @@
 import { NextAuthOptions } from 'next-auth'
 import GithubProvider from 'next-auth/providers/github'
-import MicrosoftEntraID from 'next-auth/providers/microsoft-entra-id'
+import AzureADProvider from 'next-auth/providers/azure-ad'
 import { PrismaAdapter } from '@auth/prisma-adapter'
 import { prisma } from './prisma'
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
   providers: [
-    // ── Primary: Microsoft 365 / Azure AD (school accounts) ─────────────────
-    MicrosoftEntraID({
+    // ?? Primary: Microsoft 365 / Azure AD (school accounts) ?????????????????
+    AzureADProvider({
       clientId: process.env.AZURE_AD_CLIENT_ID!,
       clientSecret: process.env.AZURE_AD_CLIENT_SECRET!,
       tenantId: process.env.AZURE_AD_TENANT_ID ?? 'common',
     }),
 
-    // ── Fallback: GitHub OAuth ───────────────────────────────────────────────
+    // ?? Fallback: GitHub OAuth ???????????????????????????????????????????????
     GithubProvider({
       clientId: process.env.GITHUB_CLIENT_ID!,
       clientSecret: process.env.GITHUB_CLIENT_SECRET!,
@@ -24,7 +24,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, user }) {
       if (session.user) {
         session.user.id = user.id
-        // DB에서 role 조회
+        // DB?? role ??
         const teacher = await prisma.teacher.findUnique({
           where: { id: user.id },
           select: { role: true },
